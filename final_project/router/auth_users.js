@@ -35,10 +35,13 @@ regd_users.post("/login", (req, res) => {
   }
 
   // Generate a JWT token
-  const accessToken = jwt.sign({ username }, 'access_secret_key', { expiresIn: '1h' });
+  const accessToken = jwt.sign({ username }, 'access', { expiresIn: '1h' });
 
-  // Send the JWT token
-  return res.status(200).json({ message: "Login successful", token: accessToken });
+  // Save the token in the session
+  req.session.authorization = { accessToken };
+
+  // Send a success message without the token in the response
+  return res.status(200).json({ message: "Login successful" });
 });
 
 // Add or modify a book review
@@ -46,20 +49,21 @@ regd_users.put("/auth/review/:isbn", (req, res) => {
   const isbn = req.params.isbn;
   const { review } = req.query;
 
-  // Verify that a review and token exist
+  // Verify that a review exists
   if (!review) {
     return res.status(400).json({ message: "Review is required" });
   }
 
-  const token = req.headers.authorization;
+  // Check if the session contains the JWT token
+  const token = req.session.authorization;
   if (!token) {
     return res.status(401).json({ message: "Authentication token is required" });
   }
 
-  // Decode the token to get the username
+  // Decode the JWT token to get the username
   let username;
   try {
-    const decoded = jwt.verify(token, 'access_secret_key');
+    const decoded = jwt.verify(token.accessToken, 'access');
     username = decoded.username;
   } catch (err) {
     return res.status(403).json({ message: "Invalid token" });
@@ -78,22 +82,27 @@ regd_users.put("/auth/review/:isbn", (req, res) => {
 
   book.reviews[username] = review;  // Add or modify the review
 
-  return res.status(200).json({ message: "Review added/modified successfully" });
+  // Respond with the ISBN and the action performed
+  return res.status(200).json({
+    message: `Review for ISBN ${isbn} added/modified successfully`,
+    review: book.reviews[username]
+  });
 });
 
 // Delete a book review
 regd_users.delete("/auth/review/:isbn", (req, res) => {
   const isbn = req.params.isbn;
 
-  const token = req.headers.authorization;
+  // Check if the session contains the JWT token
+  const token = req.session.authorization;
   if (!token) {
     return res.status(401).json({ message: "Authentication token is required" });
   }
 
-  // Decode the token to get the username
+  // Decode the JWT token to get the username
   let username;
   try {
-    const decoded = jwt.verify(token, 'access_secret_key');
+    const decoded = jwt.verify(token.accessToken, 'access');
     username = decoded.username;
   } catch (err) {
     return res.status(403).json({ message: "Invalid token" });
@@ -108,7 +117,7 @@ regd_users.delete("/auth/review/:isbn", (req, res) => {
   // Check if the user has a review for this book
   if (book.reviews && book.reviews[username]) {
     delete book.reviews[username];  // Delete the user's review
-    return res.status(200).json({ message: "Review deleted successfully" });
+    return res.status(200).json({ message: `Review for ISBN ${isbn} deleted successfully` });
   } else {
     return res.status(404).json({ message: "Review not found for this user" });
   }
